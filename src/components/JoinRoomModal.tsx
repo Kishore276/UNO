@@ -5,7 +5,7 @@ import { useGameStore } from '../stores/gameStore';
 import toast from 'react-hot-toast';
 
 const JoinRoomModal: React.FC = () => {
-  const { setShowJoinRoomModal, setCurrentRoom, currentUser, availableRooms } = useGameStore();
+  const { setShowJoinRoomModal, joinRoom, findRoom } = useGameStore();
   const [roomId, setRoomId] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -16,76 +16,30 @@ const JoinRoomModal: React.FC = () => {
       return;
     }
 
-    if (!currentUser) {
-      toast.error('Please create a username first');
-      return;
-    }
-
     setIsLoading(true);
 
     try {
-      // Simulate API call to find room
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // For demo, try to find room in available rooms or create a mock room
-      let targetRoom = availableRooms.find(room => room.id === roomId);
-
-      if (!targetRoom) {
-        // Create a mock room for demo purposes
-        targetRoom = {
-          id: roomId,
-          name: `Room ${roomId}`,
-          isPrivate: password.length > 0,
-          password: password || undefined,
-          maxPlayers: 10,
-          currentPlayers: 1,
-          players: [currentUser],
-          gameInProgress: false,
-          host: currentUser.id,
-          gameMode: {
-            name: 'Classic',
-            description: 'Standard UNO rules',
-            rules: ['Standard UNO rules apply'],
-            isTeamMode: false,
-            maxPlayers: 10
-          },
-          houseRules: {
-            stackDrawCards: true,
-            jumpIn: false,
-            sevenSwap: false,
-            zeroRotate: false,
-            noBluffing: false,
-            challengeWild4: true
-          }
-        };
-      } else {
-        // Check if room is private and password is required
-        if (targetRoom.isPrivate && targetRoom.password !== password) {
-          toast.error('Incorrect password');
+      // Check if room exists first
+      const existingRoom = findRoom(roomId);
+      
+      if (existingRoom) {
+        // Room exists, show preview
+        if (existingRoom.isPrivate && !password) {
+          toast.error('This room requires a password');
           setIsLoading(false);
           return;
         }
-
-        // Check if room is full
-        if (targetRoom.currentPlayers >= targetRoom.maxPlayers) {
-          toast.error('Room is full');
-          setIsLoading(false);
-          return;
-        }
-
-        // Add current user to room
-        targetRoom = {
-          ...targetRoom,
-          players: [...targetRoom.players, currentUser],
-          currentPlayers: targetRoom.currentPlayers + 1
-        };
       }
 
-      setCurrentRoom(targetRoom);
+      // Join the room using the store function
+      await joinRoom(roomId, password);
+      
       setShowJoinRoomModal(false);
+      setRoomId('');
+      setPassword('');
       toast.success(`Joined room ${roomId}!`);
     } catch (error) {
-      toast.error('Failed to join room');
+      toast.error(error instanceof Error ? error.message : 'Failed to join room');
     } finally {
       setIsLoading(false);
     }
@@ -96,6 +50,9 @@ const JoinRoomModal: React.FC = () => {
       handleJoinRoom();
     }
   };
+
+  // Get room preview
+  const roomPreview = findRoom(roomId);
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -164,12 +121,28 @@ const JoinRoomModal: React.FC = () => {
             </div>
             <div className="text-sm text-gray-300">
               {roomId ? (
-                <>
-                  <div>Room ID: <span className="font-mono text-white">{roomId}</span></div>
-                  <div className="text-xs text-gray-400 mt-1">
-                    You'll join this room when you click "Join Room"
-                  </div>
-                </>
+                roomPreview ? (
+                  <>
+                    <div className="space-y-2">
+                      <div>Room: <span className="text-white font-semibold">{roomPreview.name}</span></div>
+                      <div>Players: <span className="text-white">{roomPreview.currentPlayers}/{roomPreview.maxPlayers}</span></div>
+                      <div>Mode: <span className="text-white">{roomPreview.gameMode.name}</span></div>
+                      {roomPreview.isPrivate && (
+                        <div className="text-yellow-400">🔒 Private Room</div>
+                      )}
+                      {roomPreview.gameInProgress && (
+                        <div className="text-green-400">🎮 Game in Progress</div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>Room ID: <span className="font-mono text-white">{roomId}</span></div>
+                    <div className="text-xs text-gray-400 mt-1">
+                      Room not found. A new room will be created.
+                    </div>
+                  </>
+                )
               ) : (
                 <div className="text-gray-400">Enter a room ID to see details</div>
               )}
@@ -206,7 +179,7 @@ const JoinRoomModal: React.FC = () => {
                 <span>Joining...</span>
               </div>
             ) : (
-              'Join Room'
+              roomPreview ? 'Join Room' : 'Create & Join'
             )}
           </motion.button>
         </div>

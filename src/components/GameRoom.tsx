@@ -13,11 +13,12 @@ const GameRoom: React.FC = () => {
     setCurrentRoom,
     currentUser,
     gameState,
-    setGameState
+    setGameState,
+    showChat,
+    setShowChat
   } = useGameStore();
 
   const [showSettings, setShowSettings] = useState(false);
-  const [showChat, setShowChat] = useState(true);
   const [gameStarted, setGameStarted] = useState(false);
 
   useEffect(() => {

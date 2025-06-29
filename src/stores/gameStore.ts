@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Player, GameRoom, GameState, ChatMessage, Tournament, Club, Achievement } from '../types/game';
+import { generateRoomId, canJoinRoom, addPlayerToRoom, removePlayerFromRoom } from '../utils/gameLogic';
 
 interface GameStore {
   // User state
@@ -12,9 +13,18 @@ interface GameStore {
   currentRoom: GameRoom | null;
   availableRooms: GameRoom[];
   showJoinRoomModal: boolean;
+  showChat: boolean;
   setCurrentRoom: (room: GameRoom | null) => void;
   setAvailableRooms: (rooms: GameRoom[]) => void;
   setShowJoinRoomModal: (show: boolean) => void;
+  setShowChat: (show: boolean) => void;
+  
+  // Room management functions
+  joinRoom: (roomId: string, password?: string) => Promise<boolean>;
+  leaveRoom: () => void;
+  createRoom: (roomData: Partial<GameRoom>) => GameRoom;
+  updateRoom: (roomId: string, updates: Partial<GameRoom>) => void;
+  findRoom: (roomId: string) => GameRoom | undefined;
   
   // Game state
   gameState: GameState | null;
@@ -75,9 +85,154 @@ export const useGameStore = create<GameStore>((set, get) => ({
   currentRoom: null,
   availableRooms: [],
   showJoinRoomModal: false,
+  showChat: true,
   setCurrentRoom: (room) => set({ currentRoom: room }),
   setAvailableRooms: (rooms) => set({ availableRooms: rooms }),
   setShowJoinRoomModal: (show) => set({ showJoinRoomModal: show }),
+  setShowChat: (show) => set({ showChat: show }),
+  
+  // Room management functions
+  joinRoom: async (roomId: string, password?: string) => {
+    const { currentUser, availableRooms, setCurrentRoom, setAvailableRooms } = get();
+    
+    if (!currentUser) {
+      throw new Error('Please create a username first');
+    }
+
+    // Find existing room
+    let targetRoom = availableRooms.find(room => room.id === roomId);
+    
+    if (!targetRoom) {
+      // Room doesn't exist, create a new one for demo purposes
+      targetRoom = {
+        id: roomId,
+        name: `Room ${roomId}`,
+        isPrivate: password ? true : false,
+        password: password || undefined,
+        maxPlayers: 10,
+        currentPlayers: 1,
+        players: [currentUser],
+        gameInProgress: false,
+        host: currentUser.id,
+        gameMode: {
+          name: 'Classic',
+          description: 'Standard UNO rules',
+          rules: ['Standard UNO rules apply'],
+          isTeamMode: false,
+          maxPlayers: 10
+        },
+        houseRules: {
+          stackDrawCards: true,
+          jumpIn: false,
+          sevenSwap: false,
+          zeroRotate: false,
+          noBluffing: false,
+          challengeWild4: true
+        }
+      };
+      
+      // Add to available rooms
+      setAvailableRooms([...availableRooms, targetRoom]);
+    } else {
+      // Room exists, validate if we can join
+      const validation = canJoinRoom(targetRoom, currentUser, password);
+      if (!validation.canJoin) {
+        throw new Error(validation.error || 'Cannot join room');
+      }
+      
+      // Add user to room using utility function
+      targetRoom = addPlayerToRoom(targetRoom, currentUser);
+      
+      // Update the room in available rooms
+      const updatedRooms = availableRooms.map(room => 
+        room.id === roomId ? targetRoom : room
+      );
+      setAvailableRooms(updatedRooms);
+    }
+    
+    setCurrentRoom(targetRoom);
+    return true;
+  },
+  
+  leaveRoom: () => {
+    const { currentRoom, currentUser, availableRooms, setCurrentRoom, setAvailableRooms } = get();
+    
+    if (!currentRoom || !currentUser) return;
+    
+    // Remove user from room using utility function
+    const updatedRoom = removePlayerFromRoom(currentRoom, currentUser.id);
+    
+    // If room is empty, remove it from available rooms
+    if (updatedRoom.currentPlayers === 0) {
+      const updatedRooms = availableRooms.filter(room => room.id !== currentRoom.id);
+      setAvailableRooms(updatedRooms);
+    } else {
+      // Update room in available rooms
+      const updatedRooms = availableRooms.map(room => 
+        room.id === currentRoom.id ? updatedRoom : room
+      );
+      setAvailableRooms(updatedRooms);
+    }
+    
+    setCurrentRoom(null);
+  },
+  
+  createRoom: (roomData) => {
+    const { currentUser, availableRooms, setAvailableRooms } = get();
+    
+    if (!currentUser) {
+      throw new Error('Please create a username first');
+    }
+    
+    const newRoom: GameRoom = {
+      id: roomData.id || generateRoomId(),
+      name: roomData.name || 'New Room',
+      isPrivate: roomData.isPrivate || false,
+      password: roomData.password,
+      maxPlayers: roomData.maxPlayers || 10,
+      currentPlayers: 1,
+      players: [currentUser],
+      gameInProgress: false,
+      host: currentUser.id,
+      gameMode: roomData.gameMode || {
+        name: 'Classic',
+        description: 'Standard UNO rules',
+        rules: ['Standard UNO rules apply'],
+        isTeamMode: false,
+        maxPlayers: roomData.maxPlayers || 10
+      },
+      houseRules: roomData.houseRules || {
+        stackDrawCards: true,
+        jumpIn: false,
+        sevenSwap: false,
+        zeroRotate: false,
+        noBluffing: false,
+        challengeWild4: true
+      }
+    };
+    
+    setAvailableRooms([...availableRooms, newRoom]);
+    return newRoom;
+  },
+  
+  updateRoom: (roomId: string, updates: Partial<GameRoom>) => {
+    const { availableRooms, setAvailableRooms, currentRoom, setCurrentRoom } = get();
+    
+    const updatedRooms = availableRooms.map(room => 
+      room.id === roomId ? { ...room, ...updates } : room
+    );
+    setAvailableRooms(updatedRooms);
+    
+    // Update current room if it's the one being updated
+    if (currentRoom?.id === roomId) {
+      setCurrentRoom({ ...currentRoom, ...updates });
+    }
+  },
+  
+  findRoom: (roomId: string) => {
+    const { availableRooms } = get();
+    return availableRooms.find(room => room.id === roomId);
+  },
   
   // Game state
   gameState: null,

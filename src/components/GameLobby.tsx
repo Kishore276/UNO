@@ -17,7 +17,9 @@ const GameLobby: React.FC = () => {
     setShowProfile,
     setShowJoinRoomModal,
     setShowRules,
-    setShowDemo
+    setShowDemo,
+    joinRoom,
+    createRoom
   } = useGameStore();
 
   const [showCreateRoom, setShowCreateRoom] = useState(false);
@@ -135,65 +137,34 @@ const GameLobby: React.FC = () => {
     setAvailableRooms(mockRooms);
   }, [setAvailableRooms]);
 
-  const generateRoomId = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let result = '';
-    for (let i = 0; i < 6; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  };
-
   const handleCreateRoom = () => {
     if (!roomName.trim()) {
       toast.error('Please enter a room name');
       return;
     }
 
-    if (!currentUser) {
-      toast.error('Please create a username first');
-      return;
-    }
-
-    const roomId = generateRoomId();
-    const newRoom: GameRoom = {
-      id: roomId,
-      name: roomName,
-      isPrivate,
-      password: isPrivate ? password : undefined,
-      maxPlayers,
-      currentPlayers: 1,
-      players: [currentUser],
-      gameInProgress: false,
-      host: currentUser.id,
-      gameMode: {
-        name: 'Classic',
-        description: 'Standard UNO rules',
-        rules: ['Standard UNO rules apply'],
-        isTeamMode: false,
+    try {
+      const newRoom = createRoom({
+        name: roomName,
+        isPrivate,
+        password: isPrivate ? password : undefined,
         maxPlayers
-      },
-      houseRules: {
-        stackDrawCards: true,
-        jumpIn: false,
-        sevenSwap: false,
-        zeroRotate: false,
-        noBluffing: false,
-        challengeWild4: true
-      }
-    };
+      });
 
-    setCurrentRoom(newRoom);
-    setShowCreateRoom(false);
-    setRoomName('');
-    setPassword('');
-    toast.success(`Room created! ID: ${roomId}`, {
-      duration: 5000,
-      icon: '🎉'
-    });
+      setCurrentRoom(newRoom);
+      setShowCreateRoom(false);
+      setRoomName('');
+      setPassword('');
+      toast.success(`Room created! ID: ${newRoom.id}`, {
+        duration: 5000,
+        icon: '🎉'
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to create room');
+    }
   };
 
-  const handleJoinRoom = (room: GameRoom) => {
+  const handleJoinRoom = async (room: GameRoom) => {
     if (!currentUser) {
       toast.error('Please create a username first');
       return;
@@ -204,20 +175,12 @@ const GameLobby: React.FC = () => {
       return;
     }
     
-    if (room.currentPlayers >= room.maxPlayers) {
-      toast.error('Room is full');
-      return;
+    try {
+      await joinRoom(room.id);
+      toast.success(`Joined ${room.name}!`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to join room');
     }
-    
-    // Add current user to room
-    const updatedRoom = {
-      ...room,
-      players: [...room.players, currentUser],
-      currentPlayers: room.currentPlayers + 1
-    };
-    
-    setCurrentRoom(updatedRoom);
-    toast.success(`Joined ${room.name}!`);
   };
 
   const copyRoomId = (roomId: string) => {
@@ -399,100 +362,96 @@ const GameLobby: React.FC = () => {
             </motion.div>
           ))}
         </div>
-      </div>
 
-      {/* Create Room Modal */}
-      {showCreateRoom && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white/10 backdrop-blur-sm rounded-xl p-6 w-full max-w-md border border-white/20"
-          >
-            <h2 className="text-2xl font-bold text-white mb-6">Create New Room</h2>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-white text-sm font-medium mb-2">Room Name</label>
-                <input
-                  type="text"
-                  value={roomName}
-                  onChange={(e) => setRoomName(e.target.value)}
-                  className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400"
-                  placeholder="Enter room name..."
-                />
-              </div>
+        {/* Create Room Modal */}
+        {showCreateRoom && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white/10 backdrop-blur-sm rounded-xl p-6 w-full max-w-md border border-white/20"
+            >
+              <h2 className="text-2xl font-bold text-white mb-6">Create New Room</h2>
               
-              <div>
-                <label className="block text-white text-sm font-medium mb-2">Max Players</label>
-                <select
-                  value={maxPlayers}
-                  onChange={(e) => setMaxPlayers(Number(e.target.value))}
-                  className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white"
-                >
-                  <option value={4} className="bg-gray-800">4 Players</option>
-                  <option value={6} className="bg-gray-800">6 Players</option>
-                  <option value={8} className="bg-gray-800">8 Players</option>
-                  <option value={10} className="bg-gray-800">10 Players</option>
-                  <option value={12} className="bg-gray-800">12 Players</option>
-                  <option value={16} className="bg-gray-800">16 Players</option>
-                </select>
-              </div>
-              
-              <div className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  id="private"
-                  checked={isPrivate}
-                  onChange={(e) => setIsPrivate(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 bg-white/10 border-white/20 rounded"
-                />
-                <label htmlFor="private" className="text-white">Private Room</label>
-              </div>
-              
-              {isPrivate && (
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-white text-sm font-medium mb-2">Password</label>
+                  <label className="block text-white text-sm font-medium mb-2">Room Name</label>
                   <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white"
-                    placeholder="Enter password..."
+                    type="text"
+                    value={roomName}
+                    onChange={(e) => setRoomName(e.target.value)}
+                    placeholder="Enter room name"
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-              )}
-
-              <div className="bg-blue-500/10 rounded-lg p-3 border border-blue-500/20">
-                <div className="text-sm text-blue-400 font-medium mb-1">Room ID Preview</div>
-                <div className="text-white font-mono">{generateRoomId()}</div>
-                <div className="text-xs text-gray-400 mt-1">
-                  A unique room ID will be generated for sharing
+                
+                <div>
+                  <label className="block text-white text-sm font-medium mb-2">Max Players</label>
+                  <select
+                    value={maxPlayers}
+                    onChange={(e) => setMaxPlayers(Number(e.target.value))}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={4}>4 Players</option>
+                    <option value={6}>6 Players</option>
+                    <option value={8}>8 Players</option>
+                    <option value={10}>10 Players</option>
+                    <option value={12}>12 Players</option>
+                  </select>
                 </div>
+                
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    id="isPrivate"
+                    checked={isPrivate}
+                    onChange={(e) => setIsPrivate(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="isPrivate" className="text-white text-sm">Private Room</label>
+                </div>
+                
+                {isPrivate && (
+                  <div>
+                    <label className="block text-white text-sm font-medium mb-2">Password</label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Enter password"
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
               </div>
-            </div>
-            
-            <div className="flex space-x-3 mt-6">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setShowCreateRoom(false)}
-                className="flex-1 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-semibold"
-              >
-                Cancel
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleCreateRoom}
-                className="flex-1 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg font-semibold"
-              >
-                Create Room
-              </motion.button>
-            </div>
-          </motion.div>
-        </div>
-      )}
+              
+              <div className="flex space-x-3 mt-6">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowCreateRoom(false)}
+                  className="flex-1 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-semibold"
+                >
+                  Cancel
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleCreateRoom}
+                  disabled={!roomName.trim()}
+                  className={`flex-1 py-3 rounded-lg font-semibold text-white ${
+                    roomName.trim()
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600'
+                      : 'bg-gray-600 cursor-not-allowed opacity-50'
+                  }`}
+                >
+                  Create Room
+                </motion.button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
