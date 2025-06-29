@@ -113,35 +113,6 @@ export function canPlayCard(card: Card, lastCard: Card, currentColor?: CardColor
   return false;
 }
 
-export function getNextPlayer(currentPlayerIndex: number, direction: 1 | -1, players: Player[]): number {
-  const nextIndex = currentPlayerIndex + direction;
-  
-  if (nextIndex >= players.length) {
-    return 0;
-  }
-  
-  if (nextIndex < 0) {
-    return players.length - 1;
-  }
-  
-  return nextIndex;
-}
-
-export function calculateScore(player: Player): number {
-  return player.cards.reduce((total, card) => {
-    if (card.type === 'number') {
-      return total + (card.value || 0);
-    }
-    if (card.type === 'skip' || card.type === 'reverse' || card.type === 'draw2') {
-      return total + 20;
-    }
-    if (card.type === 'wild' || card.type === 'wild4') {
-      return total + 50;
-    }
-    return total;
-  }, 0);
-}
-
 export function getCardColorClass(color: CardColor): string {
   const colorMap = {
     red: 'bg-red-500 border-red-600',
